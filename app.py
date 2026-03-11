@@ -216,10 +216,6 @@ STORAGE_DIR = Path("/data/podcasts")
 STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Known ad timestamps (podcast_name -> {start_cut: seconds, end_cut: seconds})
-# Extend this as you discover more
-    "pop_og_politikk": {"start": 10, "end": 0},  # cut first 10s
-    # Add more as discovered
-}
 
 # Track processing status
 PROCESSING = {}  # episode_id -> {"status": "processing"|"ready"|"error", "progress": 0-100}
@@ -339,18 +335,19 @@ def stream_audio(podcast_name, episode_id):
         return send_file(processed_file, mimetype='audio/mpeg')
     
     # Check if currently processing
-    if episode_id in PROCESSING and PROCESSING[episode_id].get("status") == "processing":
+    cache_key = f"{podcast_name}_{episode_id}"
+    if cache_key in PROCESSING and PROCESSING[cache_key].get("status") == "processing":
         return jsonify({"error": "Still processing, try again in a moment"}), 202
     
     # Start processing
-    PROCESSING[episode_id] = {"status": "processing", "title": title}
+    PROCESSING[cache_key] = {"status": "processing", "title": title}
     
     try:
         # Download original
         logger.info(f"Downloading: {title}")
         temp_file = episode_dir / "original.mp3"
         
-        response = requests.get(original_url, timeout=300, stream=False)
+        response = requests.get(original_url, timeout=300, stream=True)
         with open(temp_file, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
@@ -402,14 +399,43 @@ def stream_audio(podcast_name, episode_id):
         else:
             final_duration = duration - cut_start
         
-        # Apply cuts
+        # Apply cuts using stream copy (no re-encoding)
         if cut_start > 0 or ad_cuts.get("end", 0) > 0:
-            ffmpeg.input(str(temp_file), ss=cut_start).output(
-                str(processed_file),
-                t=final_duration if final_duration > 0 else duration,
-                acodec='libmp3lame',
-                ab='128k'
-            ).run(overwrite_output=True, quiet=True)
+            if ad_cuts.get("end", 0) > 0:
+                # Middle ad: concat Part A (start to intro_cut) + Part B (ad_end to end)
+                # Use file-based concat demuxer with stream copy
+                part_a = episode_dir / "part_a.mp3"
+                part_b = episode_dir / "part_b.mp3"
+                
+                # Part A: start to intro_cut
+                ffmpeg.input(str(temp_file), ss=0, t=cut_start).output(
+                    str(part_a), acodec='copy'
+                ).run(overwrite_output=True, quiet=True)
+                
+                # Part B: ad_end to end
+                ffmpeg.input(str(temp_file), ss=ad_cuts["end"]).output(
+                    str(part_b), acodec='copy'
+                ).run(overwrite_output=True, quiet=True)
+                
+                # Concat Part A + Part B
+                concat_list = episode_dir / "concat.txt"
+                with open(concat_list, 'w') as f:
+                    f.write(f"file '{part_a}'\n")
+                    f.write(f"file '{part_b}'\n")
+                
+                ffmpeg.input(str(concat_list), format='concat', safe=0).output(
+                    str(processed_file), acodec='copy'
+                ).run(overwrite_output=True, quiet=True)
+                
+                # Cleanup temp parts
+                part_a.unlink(missing_ok=True)
+                part_b.unlink(missing_ok=True)
+                concat_list.unlink(missing_ok=True)
+            else:
+                # No middle ad, just cut from intro to end
+                ffmpeg.input(str(temp_file), ss=cut_start).output(
+                    str(processed_file), acodec='copy'
+                ).run(overwrite_output=True, quiet=True)
         else:
             # No processing needed, just copy
             processed_file.write_bytes(temp_file.read_bytes())
@@ -426,7 +452,7 @@ def stream_audio(podcast_name, episode_id):
         with open(episode_dir / "metadata.json", "w") as f:
             json.dump(metadata, f)
         
-        PROCESSING[episode_id] = {"status": "ready", "title": title}
+        PROCESSING[cache_key] = {"status": "ready", "title": title}
         logger.info(f"Ready: {title}")
         
         return send_file(processed_file, mimetype='audio/mpeg')
@@ -438,7 +464,8 @@ def stream_audio(podcast_name, episode_id):
 
 
 def get_episode_info(podcast_name, episode_id):
-    """Get episode audio URL from RSS"""
+    """Get episode audio URL and stable ID from RSS"""
+    import hashlib
     rss_map = {
         "det_store_bilded": "https://rss.podplaystudio.com/692.xml",
         "pop_og_politikk": "https://rss.podplaystudio.com/4039.xml",
@@ -450,17 +477,27 @@ def get_episode_info(podcast_name, episode_id):
     
     feed = feedparser.parse(original_rss)
     
-    # Find episode by ID (we use sequential index)
-    for idx, entry in enumerate(feed.entries):
-        ep_id = idx + 1
-        if ep_id == episode_id:
-            # Find audio link
-            for link in entry.get('links', []):
-                if link.get('type', '').startswith('audio/'):
-                    return {
-                        "title": entry.get('title', 'Episode'),
-                        "audio_url": link.get('href')
-                    }
+    # Find episode by stable hash ID
+    for entry in feed.entries:
+        # Generate stable ID from GUID or audio URL
+        audio_url = None
+        for link in entry.get('links', []):
+            if link.get('type', '').startswith('audio/'):
+                audio_url = link.get('href')
+                break
+        
+        if not audio_url:
+            continue
+            
+        guid = entry.get('id', audio_url)
+        stable_id = hashlib.md5(guid.encode()).hexdigest()[:12]
+        
+        if stable_id == episode_id:
+            return {
+                "title": entry.get('title', 'Episode'),
+                "audio_url": audio_url,
+                "stable_id": stable_id
+            }
     
     return None
 
