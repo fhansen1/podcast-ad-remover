@@ -311,7 +311,7 @@ def get_feed(podcast_name):
 # AUDIO PROCESSOR - Download, cut ads, serve
 # ============================================================
 
-@app.route('/audio/<podcast_name>/<int:episode_id>')
+@app.route('/audio/<podcast_name>/<episode_id>')
 def stream_audio(podcast_name, episode_id):
     """Process and stream clean audio"""
     
@@ -464,7 +464,7 @@ def stream_audio(podcast_name, episode_id):
 
 
 def get_episode_info(podcast_name, episode_id):
-    """Get episode audio URL and stable ID from RSS"""
+    """Get episode audio URL from RSS - supports both sequential and stable hash IDs"""
     import hashlib
     rss_map = {
         "det_store_bilded": "https://rss.podplaystudio.com/692.xml",
@@ -477,9 +477,14 @@ def get_episode_info(podcast_name, episode_id):
     
     feed = feedparser.parse(original_rss)
     
-    # Find episode by stable hash ID
-    for entry in feed.entries:
-        # Generate stable ID from GUID or audio URL
+    # Try both sequential ID and stable hash
+    try:
+        seq_id = int(episode_id) if episode_id.isdigit() else None
+    except:
+        seq_id = None
+    
+    for idx, entry in enumerate(feed.entries):
+        # Get audio URL
         audio_url = None
         for link in entry.get('links', []):
             if link.get('type', '').startswith('audio/'):
@@ -488,7 +493,15 @@ def get_episode_info(podcast_name, episode_id):
         
         if not audio_url:
             continue
-            
+        
+        # Check sequential ID match
+        if seq_id is not None and (idx + 1) == seq_id:
+            return {
+                "title": entry.get('title', 'Episode'),
+                "audio_url": audio_url
+            }
+        
+        # Check stable hash match  
         guid = entry.get('id', audio_url)
         stable_id = hashlib.md5(guid.encode()).hexdigest()[:12]
         
