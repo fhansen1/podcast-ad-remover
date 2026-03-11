@@ -1,0 +1,9 @@
+ * Serving Flask app 'app'
+ * Debug mode: off
+INFO:werkzeug:[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:3333
+ * Running on http://192.168.1.79:3333
+INFO:werkzeug:[33mPress CTRL+C to quit[0m
+INFO:__main__:Serving cached: 348. TrumpTirsdag: USAs strategi for krigen og økt terrorfare i Europa - med Anders Romarheim
+INFO:werkzeug:192.168.1.237 - - [11/Mar/2026 17:15:39] "GET /audio/det_store_bilded/1 HTTP/1.1" 200 -
