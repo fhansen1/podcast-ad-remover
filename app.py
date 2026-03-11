@@ -217,8 +217,6 @@ STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Known ad timestamps (podcast_name -> {start_cut: seconds, end_cut: seconds})
 # Extend this as you discover more
-AD_TIMESTAMPS = {
-    "det_store_bilded": {"start": 60, "end": 120},  # cut first 60s, last 2min
     "pop_og_politikk": {"start": 10, "end": 0},  # cut first 10s
     # Add more as discovered
 }
