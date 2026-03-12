@@ -329,7 +329,7 @@ def get_feed(podcast_name):
 # AUDIO PROCESSOR - Download, cut ads, serve
 # ============================================================
 
-@app.route('/audio/<podcast_name>/<int:episode_id>')
+@app.route('/audio/<podcast_name>/<episode_id>')
 def stream_audio(podcast_name, episode_id):
     """Process and stream clean audio"""
     
@@ -364,7 +364,7 @@ def stream_audio(podcast_name, episode_id):
         logger.info(f"Downloading: {title}")
         temp_file = episode_dir / "original.mp3"
         
-        response = requests.get(original_url, timeout=300, stream=False)
+        response = requests.get(original_url, timeout=300, stream=True)
         with open(temp_file, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
