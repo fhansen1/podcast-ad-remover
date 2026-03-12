@@ -248,6 +248,13 @@ def get_feed(podcast_name):
     # Map podcast name to original RSS
     rss_map = {
         "det_store_bilded": "https://rss.podplaystudio.com/692.xml",
+    "pop_og_politikk": "https://rss.podplaystudio.com/4039.xml",
+    "dwarkesh": "https://apple.dwarkesh-podcast.workers.dev/feed.rss",
+    "the_rest_is_politics": "https://feeds.megaphone.fm/GLT9190936013",
+    "the_rest_is_history": "https://feeds.megaphone.fm/GLT4787413333",
+    "the_rest_is_politics_us": "https://feeds.megaphone.fm/GLT5336643697",
+    "war_on_the_rocks": "https://rss.libsyn.com/shows/70702/destinations/298196.xml",
+    "lawfare": "https://feeds.acast.com/public/shows/60518a52f69aa815d2dba41c",
         "pop_og_politikk": "https://rss.podplaystudio.com/4039.xml",
         # Add more podcasts here
     }
@@ -438,6 +445,13 @@ def get_episode_info(podcast_name, episode_id):
     """Get episode audio URL from RSS"""
     rss_map = {
         "det_store_bilded": "https://rss.podplaystudio.com/692.xml",
+    "pop_og_politikk": "https://rss.podplaystudio.com/4039.xml",
+    "dwarkesh": "https://apple.dwarkesh-podcast.workers.dev/feed.rss",
+    "the_rest_is_politics": "https://feeds.megaphone.fm/GLT9190936013",
+    "the_rest_is_history": "https://feeds.megaphone.fm/GLT4787413333",
+    "the_rest_is_politics_us": "https://feeds.megaphone.fm/GLT5336643697",
+    "war_on_the_rocks": "https://rss.libsyn.com/shows/70702/destinations/298196.xml",
+    "lawfare": "https://feeds.acast.com/public/shows/60518a52f69aa815d2dba41c",
         "pop_og_politikk": "https://rss.podplaystudio.com/4039.xml",
     }
     
