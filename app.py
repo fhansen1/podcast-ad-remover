@@ -286,7 +286,17 @@ def get_feed(podcast_name):
     
     for idx, entry in enumerate(feed.entries):
         # Use sequential ID - stable across feed updates
-        episode_id = idx + 1
+        # Get original audio URL from entry
+        orig_audio = None
+        for link in entry.get("links", []):
+            if link.get("type", "").startswith("audio/"):
+                orig_audio = link.get("href")
+                break
+        
+        if not orig_audio:
+            continue
+        
+        episode_id = hashlib.md5(orig_audio.encode()).hexdigest()[:12]
         
         rss_lines.append('<item>')
         rss_lines.append(f'<title>{xml_escape(entry.get("title", "Episode"))}</title>')
