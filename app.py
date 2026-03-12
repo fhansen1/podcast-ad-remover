@@ -255,6 +255,7 @@ def get_feed(podcast_name):
     "the_rest_is_politics_us": "https://feeds.megaphone.fm/GLT5336643697",
     "war_on_the_rocks": "https://rss.libsyn.com/shows/70702/destinations/298196.xml",
     "lawfare": "https://feeds.acast.com/public/shows/60518a52f69aa815d2dba41c",
+    "altinget_partianalysen": "https://feeds.acast.com/public/shows/68ab0413982c36846e1eb332",
         "pop_og_politikk": "https://rss.podplaystudio.com/4039.xml",
         # Add more podcasts here
     }
@@ -462,6 +463,7 @@ def get_episode_info(podcast_name, episode_id):
     "the_rest_is_politics_us": "https://feeds.megaphone.fm/GLT5336643697",
     "war_on_the_rocks": "https://rss.libsyn.com/shows/70702/destinations/298196.xml",
     "lawfare": "https://feeds.acast.com/public/shows/60518a52f69aa815d2dba41c",
+    "altinget_partianalysen": "https://feeds.acast.com/public/shows/68ab0413982c36846e1eb332",
         "pop_og_politikk": "https://rss.podplaystudio.com/4039.xml",
     }
     
