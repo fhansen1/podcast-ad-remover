@@ -8,6 +8,7 @@ import os
 import re
 import time
 import uuid
+import hashlib
 import json
 import logging
 from datetime import datetime, timedelta
@@ -246,65 +247,10 @@ def get_feed(podcast_name):
     """Get modified RSS with our audio URLs"""
     # Map podcast name to original RSS
     rss_map = {
-    "det_store_bilded": "https://rss.podplaystudio.com/692.xml",
-    "pop_og_politikk": "https://rss.podplaystudio.com/4039.xml",
-    "frelst": "https://www.omnycontent.com/d/playlist/b879ead7-5fbb-4c64-bede-b13801013ca4/5ffb3cc5-5bac-4124-9a56-b164009e28a9/7c34fe34-5d23-4ccb-ae13-b164009e28c5/podcast.rss",
-    "trygdekontoret": "https://podkast.nrk.no/program/trygdekontoret.rss",
-    "dwarkesh": "https://apple.dwarkesh-podcast.workers.dev/feed.rss",
-    "den_politiske_situasjonen": "https://feeds.acast.com/public/shows/f6006cc3-2278-4017-b9ca-35d6e229e7fd",
-    "fotballfortellinger": "https://www.omnycontent.com/d/playlist/d79bdbb3-8eae-4ad2-b1f6-b0bc00cd1540/2b102ed8-af4a-4d51-ad41-b27b0106e973/46b58f60-9633-43f6-aa67-b27b0106e97a/podcast.rss",
-    "the_rest_is_politics_leading": "https://feeds.megaphone.fm/GLT9029505120",
-    "otto_og_anne": "https://rss.podplaystudio.com/745.xml",
-    "heia_fotball": "https://podkast.nrk.no/program/heia_fotball.rss",
-    "tid_er_penger": "https://feeds.acast.com/public/shows/659c418069d2da0016ac759b",
-    "empire_world_history": "https://feeds.megaphone.fm/empirepodcast",
-    "fladseth": "https://www.omnycontent.com/d/playlist/d79bdbb3-8eae-4ad2-b1f6-b0bc00cd1540/afaede69-c88e-4075-aa19-b15400c5650b/7960a0b2-0102-4b8c-a665-b15400c56519/podcast.rss",
-    "historier_som_endret_verden": "https://feeds.acast.com/public/shows/63889d03eaf58500117bbbca",
-    "rett_og_slett": "https://www.omnycontent.com/d/playlist/d79bdbb3-8eae-4ad2-b1f6-b0bc00cd1540/abdff6d2-d127-4cdf-8754-b15e00efcf82/c7367e4f-9138-4cf7-8c55-b15e00efcf95/podcast.rss",
-    "alt_fortalt": "https://podcast.stream.schibsted.media/vgtv/100447?podcast",
-    "peter_zeihan": "https://media.rss.com/zeihan/feed.xml",
-    "pedagogisk_idrettspreik": "https://rss.libsyn.com/shows/112281/destinations/626995.xml",
-    "psykodrama": "https://feeds.acast.com/public/shows/401782a2-4af0-4760-8505-6a2075d6887a",
-    "chivadze": "https://www.omnycontent.com/d/playlist/d79bdbb3-8eae-4ad2-b1f6-b0bc00cd1540/f0177c62-0df5-47e1-afbc-b15e00efd15b/0f467901-7814-49b9-8700-b15e00efd169/podcast.rss",
-    "dritte_halbzeit": "https://www.omnycontent.com/d/playlist/d79bdbb3-8eae-4ad2-b1f6-b0bc00cd1540/f4d4250b-5585-46f1-8f08-b149016d7f2b/d46c4794-37fc-460b-bbb5-b149016d7f55/podcast.rss",
-    "when_we_were_kings": "https://feed.pod.space/whenwewerekings",
-    "skisporet": "https://skisporet.libsyn.com/rss",
-    "misjonen": "https://smartpod.no/feed/misjonen",
-    "real_dictators": "https://feeds.megaphone.fm/NSR6187882468",
-    "aftenpodden_usa": "https://podcast.stream.schibsted.media/ap/100196?podcast",
-    "krigsrevyen": "https://www.omnycontent.com/d/playlist/d79bdbb3-8eae-4ad2-b1f6-b0bc00cd1540/3a78fd64-b2e2-4c2c-a854-b27c00ed7886/b086f1a2-fbd3-44cf-9e05-b27c00ed789b/podcast.rss",
-    "foreldrepodden": "https://rss.buzzsprout.com/1909514.rss",
-    "teknisk_sett": "https://www.omnycontent.com/d/playlist/d79bdbb3-8eae-4ad2-b1f6-b0bc00cd1540/5d96f449-e2b9-434a-8880-b14c007a47b3/6a1f66ca-8da3-4bf7-9935-b14c007a47ca/podcast.rss",
-    "the_rest_is_classified": "https://feeds.megaphone.fm/therestisclassified",
-    "lawfare": "https://feeds.acast.com/public/shows/60518a52f69aa815d2dba41c",
-    "the_rest_is_history": "https://feeds.megaphone.fm/GLT4787413333",
-    "historier_som_endret_norge": "https://feeds.acast.com/public/shows/63889ebd60bbdd001068859c",
-    "krimpodden": "https://podcast.stream.schibsted.media/vgtv/100417?podcast",
-    "fotballklubben": "https://anchor.fm/s/10854bc18/podcast/rss",
-    "rekommandert": "https://feeds.acast.com/public/shows/f2b8c8dd-60de-4e34-b49d-a689f67ff31f",
-    "hacks_on_tap": "https://feeds.megaphone.fm/VMP7545057845",
-    "stormkast": "https://rss.podplaystudio.com/602.xml",
-    "breaking_marathon_limits": "https://rss.buzzsprout.com/299975.rss",
-    "political_gabfest": "https://my.slate.com/podcasts/feeds/political-gabfest/",
-    "the_rest_is_politics_us": "https://feeds.megaphone.fm/GLT5336643697",
-    "laligaloca": "https://www.omnycontent.com/d/playlist/d79bdbb3-8eae-4ad2-b1f6-b0bc00cd1540/ea6e7251-b0a6-4148-8690-b15400c4d0b9/81f76f17-14b9-4845-912f-b15400c4d0c7/podcast.rss",
-    "avhort": "https://feeds.acast.com/public/shows/685bb5014a2d8b8b51e33360",
-    "altinget_partianalysen": "https://feeds.acast.com/public/shows/altinget-partianalysen",
-    "olympiapodden": "https://feeds.soundcloud.com/users/soundcloud:users:420086565/sounds.rss",
-    "war_on_the_rocks": "https://rss.libsyn.com/shows/70702/destinations/298196.xml",
-    "the_drop": "https://anchor.fm/s/347e3928/podcast/rss",
-    "oppdatert": "https://podkast.nrk.no/program/oppdatert.rss",
-    "valgkampsirkuset": "https://feeds.acast.com/public/shows/655761451a7d7e0012c36c95",
-    "hans_holund": "https://feeds.acast.com/public/shows/653f7814bfecf80012750eb9",
-    "short_history_of": "https://feeds.megaphone.fm/NSR8236478683",
-    "the_rest_is_politics": "https://feeds.megaphone.fm/GLT9190936013",
-    "foreldreradet": "https://feeds.acast.com/public/shows/de647d54-d4a9-4ed5-b404-d5e0e1679630",
-    "lopeskopodden": "https://www.omnycontent.com/d/playlist/d79bdbb3-8eae-4ad2-b1f6-b0bc00cd1540/3446a04c-4e9e-484d-864d-b27c00ed7950/25a6340a-216f-4e44-849a-b27c00ed795b/podcast.rss",
-    "loperadet": "https://feeds.acast.com/public/shows/67c84bbd48f26a4bcaecfa09",
-    "everything_everywhere_daily": "https://feeds.megaphone.fm/ADV3162807280",
-    "dan_snow_history_hit": "https://access.acast.com/rss/c939f8d1-c4bc-478e-8bb9-e5343f9a7ab5",
-    "ukraine_the_latest": "https://feeds.acast.com/public/shows/6583012e715d5300169dcdcb",
-}
+        "det_store_bilded": "https://rss.podplaystudio.com/692.xml",
+        "pop_og_politikk": "https://rss.podplaystudio.com/4039.xml",
+        # Add more podcasts here
+    }
     
     original_rss = rss_map.get(podcast_name)
     if not original_rss:
@@ -366,7 +312,7 @@ def get_feed(podcast_name):
 # AUDIO PROCESSOR - Download, cut ads, serve
 # ============================================================
 
-@app.route('/audio/<podcast_name>/<episode_id>')
+@app.route('/audio/<podcast_name>/<int:episode_id>')
 def stream_audio(podcast_name, episode_id):
     """Process and stream clean audio"""
     
@@ -390,19 +336,18 @@ def stream_audio(podcast_name, episode_id):
         return send_file(processed_file, mimetype='audio/mpeg')
     
     # Check if currently processing
-    cache_key = f"{podcast_name}_{episode_id}"
-    if cache_key in PROCESSING and PROCESSING[cache_key].get("status") == "processing":
+    if episode_id in PROCESSING and PROCESSING[episode_id].get("status") == "processing":
         return jsonify({"error": "Still processing, try again in a moment"}), 202
     
     # Start processing
-    PROCESSING[cache_key] = {"status": "processing", "title": title}
+    PROCESSING[episode_id] = {"status": "processing", "title": title}
     
     try:
         # Download original
         logger.info(f"Downloading: {title}")
         temp_file = episode_dir / "original.mp3"
         
-        response = requests.get(original_url, timeout=300, stream=True)
+        response = requests.get(original_url, timeout=300, stream=False)
         with open(temp_file, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
@@ -454,43 +399,14 @@ def stream_audio(podcast_name, episode_id):
         else:
             final_duration = duration - cut_start
         
-        # Apply cuts using stream copy (no re-encoding)
+        # Apply cuts
         if cut_start > 0 or ad_cuts.get("end", 0) > 0:
-            if ad_cuts.get("end", 0) > 0:
-                # Middle ad: concat Part A (start to intro_cut) + Part B (ad_end to end)
-                # Use file-based concat demuxer with stream copy
-                part_a = episode_dir / "part_a.mp3"
-                part_b = episode_dir / "part_b.mp3"
-                
-                # Part A: start to intro_cut
-                ffmpeg.input(str(temp_file), ss=0, t=cut_start).output(
-                    str(part_a), acodec='copy'
-                ).run(overwrite_output=True, quiet=True)
-                
-                # Part B: ad_end to end
-                ffmpeg.input(str(temp_file), ss=ad_cuts["end"]).output(
-                    str(part_b), acodec='copy'
-                ).run(overwrite_output=True, quiet=True)
-                
-                # Concat Part A + Part B
-                concat_list = episode_dir / "concat.txt"
-                with open(concat_list, 'w') as f:
-                    f.write(f"file '{part_a}'\n")
-                    f.write(f"file '{part_b}'\n")
-                
-                ffmpeg.input(str(concat_list), format='concat', safe=0).output(
-                    str(processed_file), acodec='copy'
-                ).run(overwrite_output=True, quiet=True)
-                
-                # Cleanup temp parts
-                part_a.unlink(missing_ok=True)
-                part_b.unlink(missing_ok=True)
-                concat_list.unlink(missing_ok=True)
-            else:
-                # No middle ad, just cut from intro to end
-                ffmpeg.input(str(temp_file), ss=cut_start).output(
-                    str(processed_file), acodec='copy'
-                ).run(overwrite_output=True, quiet=True)
+            ffmpeg.input(str(temp_file), ss=cut_start).output(
+                str(processed_file),
+                t=final_duration if final_duration > 0 else duration,
+                acodec='libmp3lame',
+                ab='128k'
+            ).run(overwrite_output=True, quiet=True)
         else:
             # No processing needed, just copy
             processed_file.write_bytes(temp_file.read_bytes())
@@ -507,7 +423,7 @@ def stream_audio(podcast_name, episode_id):
         with open(episode_dir / "metadata.json", "w") as f:
             json.dump(metadata, f)
         
-        PROCESSING[cache_key] = {"status": "ready", "title": title}
+        PROCESSING[episode_id] = {"status": "ready", "title": title}
         logger.info(f"Ready: {title}")
         
         return send_file(processed_file, mimetype='audio/mpeg')
@@ -519,68 +435,11 @@ def stream_audio(podcast_name, episode_id):
 
 
 def get_episode_info(podcast_name, episode_id):
-    """Get episode audio URL from RSS - supports both sequential and stable hash IDs"""
-    import hashlib
+    """Get episode audio URL from RSS"""
     rss_map = {
-    "det_store_bilded": "https://rss.podplaystudio.com/692.xml",
-    "pop_og_politikk": "https://rss.podplaystudio.com/4039.xml",
-    "frelst": "https://www.omnycontent.com/d/playlist/b879ead7-5fbb-4c64-bede-b13801013ca4/5ffb3cc5-5bac-4124-9a56-b164009e28a9/7c34fe34-5d23-4ccb-ae13-b164009e28c5/podcast.rss",
-    "trygdekontoret": "https://podkast.nrk.no/program/trygdekontoret.rss",
-    "dwarkesh": "https://apple.dwarkesh-podcast.workers.dev/feed.rss",
-    "den_politiske_situasjonen": "https://feeds.acast.com/public/shows/f6006cc3-2278-4017-b9ca-35d6e229e7fd",
-    "fotballfortellinger": "https://www.omnycontent.com/d/playlist/d79bdbb3-8eae-4ad2-b1f6-b0bc00cd1540/2b102ed8-af4a-4d51-ad41-b27b0106e973/46b58f60-9633-43f6-aa67-b27b0106e97a/podcast.rss",
-    "the_rest_is_politics_leading": "https://feeds.megaphone.fm/GLT9029505120",
-    "otto_og_anne": "https://rss.podplaystudio.com/745.xml",
-    "heia_fotball": "https://podkast.nrk.no/program/heia_fotball.rss",
-    "tid_er_penger": "https://feeds.acast.com/public/shows/659c418069d2da0016ac759b",
-    "empire_world_history": "https://feeds.megaphone.fm/empirepodcast",
-    "fladseth": "https://www.omnycontent.com/d/playlist/d79bdbb3-8eae-4ad2-b1f6-b0bc00cd1540/afaede69-c88e-4075-aa19-b15400c5650b/7960a0b2-0102-4b8c-a665-b15400c56519/podcast.rss",
-    "historier_som_endret_verden": "https://feeds.acast.com/public/shows/63889d03eaf58500117bbbca",
-    "rett_og_slett": "https://www.omnycontent.com/d/playlist/d79bdbb3-8eae-4ad2-b1f6-b0bc00cd1540/abdff6d2-d127-4cdf-8754-b15e00efcf82/c7367e4f-9138-4cf7-8c55-b15e00efcf95/podcast.rss",
-    "alt_fortalt": "https://podcast.stream.schibsted.media/vgtv/100447?podcast",
-    "peter_zeihan": "https://media.rss.com/zeihan/feed.xml",
-    "pedagogisk_idrettspreik": "https://rss.libsyn.com/shows/112281/destinations/626995.xml",
-    "psykodrama": "https://feeds.acast.com/public/shows/401782a2-4af0-4760-8505-6a2075d6887a",
-    "chivadze": "https://www.omnycontent.com/d/playlist/d79bdbb3-8eae-4ad2-b1f6-b0bc00cd1540/f0177c62-0df5-47e1-afbc-b15e00efd15b/0f467901-7814-49b9-8700-b15e00efd169/podcast.rss",
-    "dritte_halbzeit": "https://www.omnycontent.com/d/playlist/d79bdbb3-8eae-4ad2-b1f6-b0bc00cd1540/f4d4250b-5585-46f1-8f08-b149016d7f2b/d46c4794-37fc-460b-bbb5-b149016d7f55/podcast.rss",
-    "when_we_were_kings": "https://feed.pod.space/whenwewerekings",
-    "skisporet": "https://skisporet.libsyn.com/rss",
-    "misjonen": "https://smartpod.no/feed/misjonen",
-    "real_dictators": "https://feeds.megaphone.fm/NSR6187882468",
-    "aftenpodden_usa": "https://podcast.stream.schibsted.media/ap/100196?podcast",
-    "krigsrevyen": "https://www.omnycontent.com/d/playlist/d79bdbb3-8eae-4ad2-b1f6-b0bc00cd1540/3a78fd64-b2e2-4c2c-a854-b27c00ed7886/b086f1a2-fbd3-44cf-9e05-b27c00ed789b/podcast.rss",
-    "foreldrepodden": "https://rss.buzzsprout.com/1909514.rss",
-    "teknisk_sett": "https://www.omnycontent.com/d/playlist/d79bdbb3-8eae-4ad2-b1f6-b0bc00cd1540/5d96f449-e2b9-434a-8880-b14c007a47b3/6a1f66ca-8da3-4bf7-9935-b14c007a47ca/podcast.rss",
-    "the_rest_is_classified": "https://feeds.megaphone.fm/therestisclassified",
-    "lawfare": "https://feeds.acast.com/public/shows/60518a52f69aa815d2dba41c",
-    "the_rest_is_history": "https://feeds.megaphone.fm/GLT4787413333",
-    "historier_som_endret_norge": "https://feeds.acast.com/public/shows/63889ebd60bbdd001068859c",
-    "krimpodden": "https://podcast.stream.schibsted.media/vgtv/100417?podcast",
-    "fotballklubben": "https://anchor.fm/s/10854bc18/podcast/rss",
-    "rekommandert": "https://feeds.acast.com/public/shows/f2b8c8dd-60de-4e34-b49d-a689f67ff31f",
-    "hacks_on_tap": "https://feeds.megaphone.fm/VMP7545057845",
-    "stormkast": "https://rss.podplaystudio.com/602.xml",
-    "breaking_marathon_limits": "https://rss.buzzsprout.com/299975.rss",
-    "political_gabfest": "https://my.slate.com/podcasts/feeds/political-gabfest/",
-    "the_rest_is_politics_us": "https://feeds.megaphone.fm/GLT5336643697",
-    "laligaloca": "https://www.omnycontent.com/d/playlist/d79bdbb3-8eae-4ad2-b1f6-b0bc00cd1540/ea6e7251-b0a6-4148-8690-b15400c4d0b9/81f76f17-14b9-4845-912f-b15400c4d0c7/podcast.rss",
-    "avhort": "https://feeds.acast.com/public/shows/685bb5014a2d8b8b51e33360",
-    "altinget_partianalysen": "https://feeds.acast.com/public/shows/altinget-partianalysen",
-    "olympiapodden": "https://feeds.soundcloud.com/users/soundcloud:users:420086565/sounds.rss",
-    "war_on_the_rocks": "https://rss.libsyn.com/shows/70702/destinations/298196.xml",
-    "the_drop": "https://anchor.fm/s/347e3928/podcast/rss",
-    "oppdatert": "https://podkast.nrk.no/program/oppdatert.rss",
-    "valgkampsirkuset": "https://feeds.acast.com/public/shows/655761451a7d7e0012c36c95",
-    "hans_holund": "https://feeds.acast.com/public/shows/653f7814bfecf80012750eb9",
-    "short_history_of": "https://feeds.megaphone.fm/NSR8236478683",
-    "the_rest_is_politics": "https://feeds.megaphone.fm/GLT9190936013",
-    "foreldreradet": "https://feeds.acast.com/public/shows/de647d54-d4a9-4ed5-b404-d5e0e1679630",
-    "lopeskopodden": "https://www.omnycontent.com/d/playlist/d79bdbb3-8eae-4ad2-b1f6-b0bc00cd1540/3446a04c-4e9e-484d-864d-b27c00ed7950/25a6340a-216f-4e44-849a-b27c00ed795b/podcast.rss",
-    "loperadet": "https://feeds.acast.com/public/shows/67c84bbd48f26a4bcaecfa09",
-    "everything_everywhere_daily": "https://feeds.megaphone.fm/ADV3162807280",
-    "dan_snow_history_hit": "https://access.acast.com/rss/c939f8d1-c4bc-478e-8bb9-e5343f9a7ab5",
-    "ukraine_the_latest": "https://feeds.acast.com/public/shows/6583012e715d5300169dcdcb",
-}
+        "det_store_bilded": "https://rss.podplaystudio.com/692.xml",
+        "pop_og_politikk": "https://rss.podplaystudio.com/4039.xml",
+    }
     
     original_rss = rss_map.get(podcast_name)
     if not original_rss:
@@ -588,40 +447,17 @@ def get_episode_info(podcast_name, episode_id):
     
     feed = feedparser.parse(original_rss)
     
-    # Try both sequential ID and stable hash
-    try:
-        seq_id = int(episode_id) if episode_id.isdigit() else None
-    except:
-        seq_id = None
-    
+    # Find episode by ID (we use sequential index)
     for idx, entry in enumerate(feed.entries):
-        # Get audio URL
-        audio_url = None
-        for link in entry.get('links', []):
-            if link.get('type', '').startswith('audio/'):
-                audio_url = link.get('href')
-                break
-        
-        if not audio_url:
-            continue
-        
-        # Check sequential ID match
-        if seq_id is not None and (idx + 1) == seq_id:
-            return {
-                "title": entry.get('title', 'Episode'),
-                "audio_url": audio_url
-            }
-        
-        # Check stable hash match  
-        guid = entry.get('id', audio_url)
-        stable_id = hashlib.md5(guid.encode()).hexdigest()[:12]
-        
-        if stable_id == episode_id:
-            return {
-                "title": entry.get('title', 'Episode'),
-                "audio_url": audio_url,
-                "stable_id": stable_id
-            }
+        ep_id = idx + 1
+        if ep_id == episode_id:
+            # Find audio link
+            for link in entry.get('links', []):
+                if link.get('type', '').startswith('audio/'):
+                    return {
+                        "title": entry.get('title', 'Episode'),
+                        "audio_url": link.get('href')
+                    }
     
     return None
 
