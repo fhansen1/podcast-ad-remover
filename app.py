@@ -257,6 +257,7 @@ def get_feed(podcast_name):
     "war_on_the_rocks": "https://rss.libsyn.com/shows/70702/destinations/298196.xml",
     "lawfare": "https://feeds.acast.com/public/shows/60518a52f69aa815d2dba41c",
     "altinget_partianalysen": "https://feeds.acast.com/public/shows/68ab0413982c36846e1eb332",
+    "altinget_partianalysen": "https://feeds.acast.com/public/shows/68ab0413982c36846e1eb332",
         "pop_og_politikk": "https://rss.podplaystudio.com/4039.xml",
         # Add more podcasts here
     }
@@ -444,6 +445,7 @@ def get_episode_info(podcast_name, episode_id):
         "the_rest_is_politics_us": "https://feeds.megaphone.fm/GLT5336643697",
         "war_on_the_rocks": "https://rss.libsyn.com/shows/70702/destinations/298196.xml",
         "lawfare": "https://feeds.acast.com/public/shows/60518a52f69aa815d2dba41c",
+    "altinget_partianalysen": "https://feeds.acast.com/public/shows/68ab0413982c36846e1eb332",
     }
     
     original_rss = rss_map.get(podcast_name)
@@ -464,6 +466,40 @@ def get_episode_info(podcast_name, episode_id):
             if check_id == episode_id:
                 return {"title": entry.get('title', 'Episode'), "audio_url": orig_audio}
     return None
+
+
+@app.route('/cleanup')
+def run_cleanup():
+    """Manually trigger cleanup (or call from cron)"""
+    deleted = 0
+    cutoff = datetime.now() - timedelta(days=14)
+    
+    for podcast_dir in STORAGE_DIR.iterdir():
+        if not podcast_dir.is_dir():
+            continue
+        
+        for episode_dir in podcast_dir.iterdir():
+            if not episode_dir.is_dir():
+                continue
+            
+            metadata_file = episode_dir / "metadata.json"
+            if metadata_file.exists():
+                try:
+                    with open(metadata_file) as f:
+                        metadata = json.load(f)
+                    
+                    processed_at = datetime.fromisoformat(metadata['processed_at'])
+                    if processed_at < cutoff:
+                        # Delete episode files
+                        for f in episode_dir.iterdir():
+                            if f.is_file():
+                                f.unlink()
+                        episode_dir.rmdir()
+                        deleted += 1
+                except Exception as e:
+                    print(f"Error cleaning {episode_dir}: {e}")
+    
+    return jsonify({"deleted": deleted, "message": "Cleanup complete"})
 
 
 def cleanup_old_episodes(days=14):
@@ -493,12 +529,7 @@ def cleanup_old_episodes(days=14):
     return cleaned
 
 
-@app.route('/cleanup')
-def cleanup():
-    """Manually trigger cleanup"""
-    days = request.args.get('days', 14, type=int)
-    cleaned = cleanup_old_episodes(days)
-    return jsonify({"deleted": cleaned, "message": "Cleanup complete"})
+
 
 
 if __name__ == "__main__":
