@@ -496,10 +496,11 @@ def run_cleanup():
                                 f.unlink()
                         episode_dir.rmdir()
                         deleted += 1
+                        logger.info(f"Deleted old episode folder: {episode_dir}")
                 except Exception as e:
-                    print(f"Error cleaning {episode_dir}: {e}")
+                    logger.error(f"Error cleaning up {episode_dir}: {e}")
     
-    return jsonify({"deleted": deleted, "message": "Cleanup complete"})
+    return jsonify({"status": "success", "deleted_episodes": deleted})
 
 
 def cleanup_old_episodes(days=14):
@@ -532,5 +533,6 @@ def cleanup_old_episodes(days=14):
 
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=3333)
     app.run(host="0.0.0.0", port=3333)
