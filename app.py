@@ -332,132 +332,10 @@ def get_feed(podcast_name):
 # ============================================================
 
 @app.route('/audio/<podcast_name>/<episode_id>')
-def stream_audio(podcast_name, episode_id):
-    """Process and stream clean audio"""
-    
-    # Get episode info from RSS
-    episode_info = get_episode_info(podcast_name, episode_id)
-    if not episode_info:
-        return jsonify({"error": "Episode not found"}), 404
-    
-    original_url = episode_info['audio_url']
-    title = episode_info['title']
-    
-    # Create unique file path
-    episode_dir = STORAGE_DIR / podcast_name / str(episode_id)
-    episode_dir.mkdir(parents=True, exist_ok=True)
-    
-    processed_file = episode_dir / "clean.mp3"
-    
-    # Check if already processed
-    if processed_file.exists():
-        logger.info(f"Serving cached: {title}")
-        return send_file(processed_file, mimetype='audio/mpeg')
-    
-    # Check if currently processing
-    if episode_id in PROCESSING and PROCESSING[episode_id].get("status") == "processing":
-        return jsonify({"error": "Still processing, try again in a moment"}), 202
-    
-    # Start processing
-    PROCESSING[episode_id] = {"status": "processing", "title": title}
-    
-    try:
-        # Download original
-        logger.info(f"Downloading: {title}")
-        temp_file = episode_dir / "original.mp3"
-        
-        response = requests.get(original_url, timeout=300, stream=True)
-        with open(temp_file, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-        
-        # STEP 1: Use fingerprint to find intro end
-        intro_info = detect_intro_with_fingerprint(str(temp_file), podcast_name)
-        
-        intro_cut = 0
-        if intro_info:
-            intro_cut = intro_info.get("intro_end", 0)
-            logger.info(f"Fingerprint: intro ends at {intro_cut:.1f}s (confidence: {intro_info.get('confidence', 0):.1%})")
-        
-        # STEP 2: Use Whisper to detect ads in the remaining audio
-        # Extract audio after intro cut for Whisper analysis
-        if intro_cut > 0:
-            temp_after_intro = episode_dir / "after_intro.mp3"
-            ffmpeg.input(str(temp_file), ss=intro_cut).output(
-                str(temp_after_intro),
-                acodec='copy'
-            ).run(overwrite_output=True, quiet=True)
-            whisper_segments = detect_ads_with_whisper(str(temp_after_intro), podcast_name)
-            temp_after_intro.unlink()  # Clean up
-        else:
-            whisper_segments = detect_ads_with_whisper(str(temp_file), podcast_name)
-        
-        # STEP 3: Calculate final cuts
-        ad_cuts = {"start": 0, "end": 0}
-        
-        if whisper_segments:
-            for seg in whisper_segments:
-                if seg.get("type") == "detected":
-                    ad_start = intro_cut + seg.get("start", 0)
-                    ad_end = intro_cut + seg.get("end", 0)
-                    logger.info(f"Whisper: ad from {ad_start:.1f}s to {ad_end:.1f}s")
-                    # Use first detected ad segment
-                    ad_cuts = {"start": ad_start, "end": ad_end}
-                    break
-        
-        # STEP 4: Process with FFmpeg - cut intro and ads
-        logger.info(f"Processing: {title} (intro cut: {intro_cut}s, ad cut: {ad_cuts})")
-        
-        # Calculate final cut points
-        cut_start = intro_cut
-        duration = get_duration(str(temp_file))
-        
-        if ad_cuts.get("end", 0) > 0:
-            # Cut from end after ad ends
-            final_duration = ad_cuts["end"] - cut_start
-        else:
-            final_duration = duration - cut_start
-        
-        # Apply cuts
-        if cut_start > 0 or ad_cuts.get("end", 0) > 0:
-            ffmpeg.input(str(temp_file), ss=cut_start).output(
-                str(processed_file),
-                t=final_duration if final_duration > 0 else duration,
-                acodec='libmp3lame',
-                ab='128k'
-            ).run(overwrite_output=True, quiet=True)
-        else:
-            # No processing needed, just copy
-            processed_file.write_bytes(temp_file.read_bytes())
-        
-        # Cleanup temp
-        temp_file.unlink()
-        
-        # Record processing time for 14-day cleanup
-        metadata = {
-            "processed_at": datetime.now().isoformat(),
-            "title": title,
-            "duration": duration
-        }
-        with open(episode_dir / "metadata.json", "w") as f:
-            json.dump(metadata, f)
-        
-        PROCESSING[episode_id] = {"status": "ready", "title": title}
-        logger.info(f"Ready: {title}")
-        
-        return send_file(processed_file, mimetype='audio/mpeg')
-    
-    except Exception as e:
-        logger.error(f"Error processing {title}: {e}")
-        PROCESSING[episode_id] = {"status": "error", "error": str(e)}
-        return jsonify({"error": str(e)}), 500
-
 
 
 def process_audio_worker(podcast_name, episode_id, original_url, title):
     """Background worker - processes audio without blocking Flask"""
-    from pathlib import Path
-    import ffmpeg
     
     episode_dir = STORAGE_DIR / podcast_name / str(episode_id)
     episode_dir.mkdir(parents=True, exist_ok=True)
@@ -468,40 +346,50 @@ def process_audio_worker(podcast_name, episode_id, original_url, title):
     
     try:
         logger.info(f"Background downloading: {title}")
+        # stream=True ensures we don't hold the file in RAM
         response = requests.get(original_url, timeout=300, stream=True)
         with open(temp_file, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
         
+        # 1. Detect Intro
         intro_info = detect_intro_with_fingerprint(str(temp_file), podcast_name)
         intro_cut = intro_info.get("intro_end", 0) if intro_info else 0
         
+        # 2. Detect Ads
         if intro_cut > 0:
             temp_after_intro = episode_dir / "after_intro.mp3"
             ffmpeg.input(str(temp_file), ss=intro_cut).output(str(temp_after_intro), acodec='copy').run(overwrite_output=True, quiet=True)
             whisper_segments = detect_ads_with_whisper(str(temp_after_intro), podcast_name)
-            temp_after_intro.unlink()
+            if temp_after_intro.exists():
+                temp_after_intro.unlink()
         else:
             whisper_segments = detect_ads_with_whisper(str(temp_file), podcast_name)
         
+        # Calculate Ad End
         ad_end = 0
         if whisper_segments:
             for seg in whisper_segments:
                 if seg.get("type") == "detected":
                     ad_end = intro_cut + seg.get("end", 0)
-                    break
+                    break # Take the first detected ad
         
         cut_start = ad_end if ad_end > 0 else intro_cut
         
         logger.info(f"Final cuts for {title} -> Starting podcast at {cut_start}s")
         
+        # 3. Apply Cuts Fast (No Re-encoding)
         if cut_start > 0:
             ffmpeg.input(str(temp_file), ss=cut_start).output(str(processed_file), acodec='copy').run(overwrite_output=True, quiet=True)
         else:
+            # No cuts needed, just move file over
             processed_file.write_bytes(temp_file.read_bytes())
         
-        temp_file.unlink()
+        # Cleanup temp file
+        if temp_file.exists():
+            temp_file.unlink()
         
+        # Save Metadata
         metadata = {"processed_at": datetime.now().isoformat(), "title": title}
         with open(episode_dir / "metadata.json", "w") as f:
             json.dump(metadata, f)
@@ -514,19 +402,48 @@ def process_audio_worker(podcast_name, episode_id, original_url, title):
         PROCESSING[cache_key] = {"status": "error", "error": str(e)}
 
 
+@app.route('/audio/<podcast_name>/<episode_id>')
+def stream_audio(podcast_name, episode_id):
+    """Serve cached audio or trigger background job and redirect"""
+    episode_info = get_episode_info(podcast_name, episode_id)
+    if not episode_info:
+        return jsonify({"error": "Episode not found"}), 404
+    
+    original_url = episode_info['audio_url']
+    episode_dir = STORAGE_DIR / podcast_name / str(episode_id)
+    processed_file = episode_dir / "clean.mp3"
+    cache_key = f"{podcast_name}_{episode_id}"
+    
+    # 1. If already processed, serve instantly!
+    if processed_file.exists():
+        logger.info(f"Serving cached: {episode_info['title']}")
+        return send_file(processed_file, mimetype='audio/mpeg')
+    
+    # 2. Start background processing if not already running
+    if cache_key not in PROCESSING or PROCESSING.get(cache_key, {}).get("status") != "processing":
+        logger.info(f"Starting background job: {episode_info['title']}")
+        PROCESSING[cache_key] = {"status": "processing"}
+        thread = threading.Thread(
+            target=process_audio_worker,
+            args=(podcast_name, episode_id, original_url, episode_info['title'])
+        )
+        thread.start()
+    
+    # 3. Redirect to original while processing
+    return redirect(original_url, code=302)
+
+
 def get_episode_info(podcast_name, episode_id):
-    """Get episode audio URL from RSS"""
+    """Find episode by matching hashed ID"""
     rss_map = {
         "det_store_bilded": "https://rss.podplaystudio.com/692.xml",
-    "pop_og_politikk": "https://rss.podplaystudio.com/4039.xml",
-    "dwarkesh": "https://apple.dwarkesh-podcast.workers.dev/feed.rss",
-    "the_rest_is_politics": "https://feeds.megaphone.fm/GLT9190936013",
-    "the_rest_is_history": "https://feeds.megaphone.fm/GLT4787413333",
-    "the_rest_is_politics_us": "https://feeds.megaphone.fm/GLT5336643697",
-    "war_on_the_rocks": "https://rss.libsyn.com/shows/70702/destinations/298196.xml",
-    "lawfare": "https://feeds.acast.com/public/shows/60518a52f69aa815d2dba41c",
-    "altinget_partianalysen": "https://feeds.acast.com/public/shows/68ab0413982c36846e1eb332",
         "pop_og_politikk": "https://rss.podplaystudio.com/4039.xml",
+        "dwarkesh": "https://apple.dwarkesh-podcast.workers.dev/feed.rss",
+        "the_rest_is_politics": "https://feeds.megaphone.fm/GLT9190936013",
+        "the_rest_is_history": "https://feeds.megaphone.fm/GLT4787413333",
+        "the_rest_is_politics_us": "https://feeds.megaphone.fm/GLT5336643697",
+        "war_on_the_rocks": "https://rss.libsyn.com/shows/70702/destinations/298196.xml",
+        "lawfare": "https://feeds.acast.com/public/shows/60518a52f69aa815d2dba41c",
     }
     
     original_rss = rss_map.get(podcast_name)
@@ -535,39 +452,27 @@ def get_episode_info(podcast_name, episode_id):
     
     feed = feedparser.parse(original_rss)
     
-    # Find episode by ID (we use sequential index)
-    for idx, entry in enumerate(feed.entries):
-        ep_id = idx + 1
-        if ep_id == episode_id:
-            # Find audio link
-            for link in entry.get('links', []):
-                if link.get('type', '').startswith('audio/'):
-                    return {
-                        "title": entry.get('title', 'Episode'),
-                        "audio_url": link.get('href')
-                    }
-    
+    for entry in feed.entries:
+        orig_audio = None
+        for link in entry.get('links', []):
+            if link.get('type', '').startswith('audio/'):
+                orig_audio = link.get('href')
+                break
+        
+        if orig_audio:
+            check_id = hashlib.md5(orig_audio.encode()).hexdigest()[:12]
+            if check_id == episode_id:
+                return {"title": entry.get('title', 'Episode'), "audio_url": orig_audio}
     return None
 
 
-def get_duration(audio_file):
-    """Get audio duration in seconds"""
-    try:
-        probe = ffmpeg.probe(str(audio_file))
-        return float(probe['format']['duration'])
-    except:
-        return 0
-
-# ============================================================
-# CLEANUP JOB - Delete episodes older than 14 days
-# ============================================================
-
-@app.route('/cleanup')
-def run_cleanup():
-    """Manually trigger cleanup (or call from cron)"""
-    deleted = 0
-    cutoff = datetime.now() - timedelta(days=14)
+def cleanup_old_episodes(days=14):
+    """Remove episodes older than specified days"""
+    import time
+    now = time.time()
+    cutoff = now - (days * 24 * 60 * 60)
     
+    cleaned = 0
     for podcast_dir in STORAGE_DIR.iterdir():
         if not podcast_dir.is_dir():
             continue
@@ -576,53 +481,25 @@ def run_cleanup():
             if not episode_dir.is_dir():
                 continue
             
-            metadata_file = episode_dir / "metadata.json"
-            if metadata_file.exists():
-                with open(metadata_file) as f:
-                    metadata = json.load(f)
-                
-                processed_at = datetime.fromisoformat(metadata['processed_at'])
-                if processed_at < cutoff:
-                    # Delete episode files
-                    for f in episode_dir.iterdir():
-                        f.unlink()
-                    episode_dir.rmdir()
-                    deleted += 1
-                    logger.info(f"Deleted old episode: {metadata['title']}")
+            try:
+                mtime = episode_dir.stat().st_mtime
+                if mtime < cutoff:
+                    import shutil
+                    shutil.rmtree(episode_dir)
+                    cleaned += 1
+            except Exception as e:
+                print(f"Error cleaning {episode_dir}: {e}")
     
-    return jsonify({"deleted": deleted, "message": "Cleanup complete"})
-
-# ============================================================
-# STATUS & HEALTH
-# ============================================================
-
-@app.route('/status')
-def status():
-    """Get processing status"""
-    return jsonify({
-        "processing": PROCESSING,
-        "storage_used": get_storage_size(),
-        "episodes": count_episodes()
-    })
+    return cleaned
 
 
-def get_storage_size():
-    """Get total storage used"""
-    total = 0
-    for f in STORAGE_DIR.rglob('*'):
-        if f.is_file():
-            total += f.stat().st_size
-    return total / (1024 * 1024)  # MB
+@app.route('/cleanup')
+def cleanup():
+    """Manually trigger cleanup"""
+    days = request.args.get('days', 14, type=int)
+    cleaned = cleanup_old_episodes(days)
+    return jsonify({"deleted": cleaned, "message": "Cleanup complete"})
 
 
-def count_episodes():
-    """Count cached episodes"""
-    count = 0
-    for podcast_dir in STORAGE_DIR.iterdir():
-        if podcast_dir.is_dir():
-            count += len([d for d in podcast_dir.iterdir() if d.is_dir()])
-    return count
-
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=3333, debug=False)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=3333)
