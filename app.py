@@ -332,10 +332,8 @@ def get_feed(podcast_name):
 # AUDIO PROCESSOR - Download, cut ads, serve
 # ============================================================
 
-@app.route('/audio/<podcast_name>/<episode_id>')
 
 
-def process_audio_worker(podcast_name, episode_id, original_url, title):
     """Background worker - processes audio without blocking Flask"""
     
     episode_dir = STORAGE_DIR / podcast_name / str(episode_id)
@@ -403,7 +401,6 @@ def process_audio_worker(podcast_name, episode_id, original_url, title):
         PROCESSING[cache_key] = {"status": "error", "error": str(e)}
 
 
-@app.route('/audio/<podcast_name>/<episode_id>')
 def stream_audio(podcast_name, episode_id):
     """Serve cached audio or trigger background job and redirect"""
     episode_info = get_episode_info(podcast_name, episode_id)
@@ -534,5 +531,6 @@ def cleanup_old_episodes(days=14):
 
 
 if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=3333)
     app.run(host='0.0.0.0', port=3333)
     app.run(host="0.0.0.0", port=3333)
