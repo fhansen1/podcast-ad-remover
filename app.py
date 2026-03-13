@@ -453,6 +453,67 @@ def stream_audio(podcast_name, episode_id):
         return jsonify({"error": str(e)}), 500
 
 
+
+def process_audio_worker(podcast_name, episode_id, original_url, title):
+    """Background worker - processes audio without blocking Flask"""
+    from pathlib import Path
+    import ffmpeg
+    
+    episode_dir = STORAGE_DIR / podcast_name / str(episode_id)
+    episode_dir.mkdir(parents=True, exist_ok=True)
+    
+    temp_file = episode_dir / "original.mp3"
+    processed_file = episode_dir / "clean.mp3"
+    cache_key = f"{podcast_name}_{episode_id}"
+    
+    try:
+        logger.info(f"Background downloading: {title}")
+        response = requests.get(original_url, timeout=300, stream=True)
+        with open(temp_file, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        
+        intro_info = detect_intro_with_fingerprint(str(temp_file), podcast_name)
+        intro_cut = intro_info.get("intro_end", 0) if intro_info else 0
+        
+        if intro_cut > 0:
+            temp_after_intro = episode_dir / "after_intro.mp3"
+            ffmpeg.input(str(temp_file), ss=intro_cut).output(str(temp_after_intro), acodec='copy').run(overwrite_output=True, quiet=True)
+            whisper_segments = detect_ads_with_whisper(str(temp_after_intro), podcast_name)
+            temp_after_intro.unlink()
+        else:
+            whisper_segments = detect_ads_with_whisper(str(temp_file), podcast_name)
+        
+        ad_end = 0
+        if whisper_segments:
+            for seg in whisper_segments:
+                if seg.get("type") == "detected":
+                    ad_end = intro_cut + seg.get("end", 0)
+                    break
+        
+        cut_start = ad_end if ad_end > 0 else intro_cut
+        
+        logger.info(f"Final cuts for {title} -> Starting podcast at {cut_start}s")
+        
+        if cut_start > 0:
+            ffmpeg.input(str(temp_file), ss=cut_start).output(str(processed_file), acodec='copy').run(overwrite_output=True, quiet=True)
+        else:
+            processed_file.write_bytes(temp_file.read_bytes())
+        
+        temp_file.unlink()
+        
+        metadata = {"processed_at": datetime.now().isoformat(), "title": title}
+        with open(episode_dir / "metadata.json", "w") as f:
+            json.dump(metadata, f)
+        
+        PROCESSING[cache_key] = {"status": "ready"}
+        logger.info(f"Finished background processing: {title}")
+    
+    except Exception as e:
+        logger.error(f"Worker failed for {title}: {e}")
+        PROCESSING[cache_key] = {"status": "error", "error": str(e)}
+
+
 def get_episode_info(podcast_name, episode_id):
     """Get episode audio URL from RSS"""
     rss_map = {
