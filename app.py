@@ -249,17 +249,26 @@ def get_feed(podcast_name):
     # Map podcast name to original RSS
     rss_map = {
         "det_store_bilded": "https://rss.podplaystudio.com/692.xml",
-    "pop_og_politikk": "https://rss.podplaystudio.com/4039.xml",
-    "dwarkesh": "https://apple.dwarkesh-podcast.workers.dev/feed.rss",
-    "the_rest_is_politics": "https://feeds.megaphone.fm/GLT9190936013",
-    "the_rest_is_history": "https://feeds.megaphone.fm/GLT4787413333",
-    "the_rest_is_politics_us": "https://feeds.megaphone.fm/GLT5336643697",
-    "war_on_the_rocks": "https://rss.libsyn.com/shows/70702/destinations/298196.xml",
-    "lawfare": "https://feeds.acast.com/public/shows/60518a52f69aa815d2dba41c",
-    "altinget_partianalysen": "https://feeds.acast.com/public/shows/68ab0413982c36846e1eb332",
-    "altinget_partianalysen": "https://feeds.acast.com/public/shows/68ab0413982c36846e1eb332",
         "pop_og_politikk": "https://rss.podplaystudio.com/4039.xml",
-        # Add more podcasts here
+        "dwarkesh": "https://apple.dwarkesh-podcast.workers.dev/feed.rss",
+        "the_rest_is_politics": "https://feeds.megaphone.fm/GLT9190936013",
+        "the_rest_is_history": "https://feeds.megaphone.fm/GLT4787413333",
+        "the_rest_is_politics_us": "https://feeds.megaphone.fm/GLT5336643697",
+        "war_on_the_rocks": "https://rss.libsyn.com/shows/70702/destinations/298196.xml",
+        "lawfare": "https://feeds.acast.com/public/shows/60518a52f69aa815d2dba41c",
+        "altinget_partianalysen": "https://feeds.acast.com/public/shows/altinget-partianalysen",
+        "aftenpodden_usa": "https://podcast.stream.schibsted.media/ap/100196?podcast",
+        "foreldreradet": "https://feeds.acast.com/public/shows/de647d54-d4a9-4ed5-b404-d5e0e1679630",
+        "loperadet": "https://feeds.acast.com/public/shows/67c84bbd48f26a4bcaecfa09",
+        "den_politiske_situasjonen": "https://feeds.acast.com/public/shows/f6006cc3-2278-4017-b9ca-35d6e229e7fd",
+        "stormkast": "https://rss.podplaystudio.com/602.xml",
+        "oppdatert": "https://podkast.nrk.no/program/oppdatert.rss",
+        "trygdekontoret": "https://podkast.nrk.no/program/trygdekontoret.rss",
+        "heia_fotball": "https://podkast.nrk.no/program/heia_fotball.rss",
+        "krimpodden": "https://podcast.stream.schibsted.media/vgtv/100417?podcast",
+        "real_dictators": "https://feeds.megaphone.fm/NSR6187882468",
+        "empire_world_history": "https://feeds.megaphone.fm/empirepodcast",
+        "frelst": "https://www.omnycontent.com/d/playlist/b879ead7-5fbb-4c64-bede-b13801013ca4/5ffb3cc5-5bac-4124-9a56-b164009e28a9/7c34fe34-5d23-4ccb-ae13-b164009e28c5/podcast.rss",
     }
     
     original_rss = rss_map.get(podcast_name)
@@ -434,7 +443,7 @@ def stream_audio(podcast_name, episode_id):
 def get_episode_info(podcast_name, episode_id):
     """Find episode by matching hashed ID"""
     rss_map = {
-        "det_store_bilded": "https://rss.podplaystudio.com/692.xml",
+"det_store_bilded": "https://rss.podplaystudio.com/692.xml",
         "pop_og_politikk": "https://rss.podplaystudio.com/4039.xml",
         "dwarkesh": "https://apple.dwarkesh-podcast.workers.dev/feed.rss",
         "the_rest_is_politics": "https://feeds.megaphone.fm/GLT9190936013",
@@ -442,7 +451,19 @@ def get_episode_info(podcast_name, episode_id):
         "the_rest_is_politics_us": "https://feeds.megaphone.fm/GLT5336643697",
         "war_on_the_rocks": "https://rss.libsyn.com/shows/70702/destinations/298196.xml",
         "lawfare": "https://feeds.acast.com/public/shows/60518a52f69aa815d2dba41c",
-    "altinget_partianalysen": "https://feeds.acast.com/public/shows/68ab0413982c36846e1eb332",
+        "altinget_partianalysen": "https://feeds.acast.com/public/shows/altinget-partianalysen",
+        "aftenpodden_usa": "https://podcast.stream.schibsted.media/ap/100196?podcast",
+        "foreldreradet": "https://feeds.acast.com/public/shows/de647d54-d4a9-4ed5-b404-d5e0e1679630",
+        "loperadet": "https://feeds.acast.com/public/shows/67c84bbd48f26a4bcaecfa09",
+        "den_politiske_situasjonen": "https://feeds.acast.com/public/shows/f6006cc3-2278-4017-b9ca-35d6e229e7fd",
+        "stormkast": "https://rss.podplaystudio.com/602.xml",
+        "oppdatert": "https://podkast.nrk.no/program/oppdatert.rss",
+        "trygdekontoret": "https://podkast.nrk.no/program/trygdekontoret.rss",
+        "heia_fotball": "https://podkast.nrk.no/program/heia_fotball.rss",
+        "krimpodden": "https://podcast.stream.schibsted.media/vgtv/100417?podcast",
+        "real_dictators": "https://feeds.megaphone.fm/NSR6187882468",
+        "empire_world_history": "https://feeds.megaphone.fm/empirepodcast",
+        "frelst": "https://www.omnycontent.com/d/playlist/b879ead7-5fbb-4c64-bede-b13801013ca4/5ffb3cc5-5bac-4124-9a56-b164009e28a9/7c34fe34-5d23-4ccb-ae13-b164009e28c5/podcast.rss",
     }
     
     original_rss = rss_map.get(podcast_name)
