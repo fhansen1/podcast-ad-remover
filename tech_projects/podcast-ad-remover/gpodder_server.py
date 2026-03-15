@@ -378,11 +378,10 @@ def stream_audio(podcast_name, episode_id):
 
         cut_start, cut_end = 0, 0
         if isinstance(timestamps, dict):
-            if timestamps.get("type") == "detected":
-                if timestamps.get("start", 0) == 0 and timestamps.get("end", 0) > 0:
-                    cut_start = timestamps["end"]
-                elif timestamps.get("start", 0) > 0 and timestamps.get("end", 0) == 0:
-                    cut_end = timestamps["start"]
+            if timestamps.get("start", 0) == 0 and timestamps.get("end", 0) > 0:
+                cut_start = timestamps["end"]
+            elif timestamps.get("start", 0) > 0 and timestamps.get("end", 0) == 0:
+                cut_end = timestamps["start"]
         if cut_start == 0 and cut_end == 0:
             cut_start = timestamps.get("start", 0)
             cut_end = timestamps.get("end", 0)
@@ -415,8 +414,10 @@ def stream_audio(podcast_name, episode_id):
         return send_file(processed_file, mimetype='audio/mpeg')
 
     except Exception as e:
-        logger.error(f"Error processing {title}: {e}")
+        logger.error(f"process_episode failed for {title}: {e}")
         PROCESSING[episode_id] = {"status": "error", "error": str(e)}
+        if temp_file.exists():
+            temp_file.unlink()
         return jsonify({"error": str(e)}), 500
 
 
