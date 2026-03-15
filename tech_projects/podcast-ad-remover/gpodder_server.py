@@ -12,6 +12,7 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from functools import wraps
+import threading
 
 import requests
 import feedparser
@@ -114,6 +115,12 @@ FEEDS = load_opml()
 app = Flask(__name__)
 app.secret_key = "podcast-ad-remover-secret-key-2024"
 
+
+def check_auth():
+    if session.get("username"):
+        return True
+    auth = request.authorization
+    return bool(auth and auth.username == GPODDER_USER and auth.password == GPODDER_PASS)
 
 def require_auth(f):
     @wraps(f)
@@ -223,18 +230,24 @@ def gpodder_devices(username):
     } for d in devices.values()])
 
 
-@app.route("/api/2/subscriptions/<username>/<device_id>.json", methods=["GET", "POST"])
+@app.route("/api/2/subscriptions/<username>/<device_id>.json", methods=["GET", "PUT", "POST"])
 @require_auth
 def gpodder_subscriptions(username, device_id):
     devices = load_devices()
     if device_id not in devices:
-        devices[device_id] = {"subscriptions": [], "id": device_id}
-    if request.method == "POST":
-        data = request.json or request.form.to_dict() or {}
-        devices[device_id]["subscriptions"] = data.get("urls", [])
+        devices[device_id] = {"subscriptions": [], "id": device_id, "updated": 0}
+    if request.method in ("PUT", "POST"):
+        data = request.json or {}
+        devices[device_id]["subscriptions"] = data if isinstance(data, list) else data.get("urls", [])
+        devices[device_id]["updated"] = int(datetime.now().timestamp())
         save_devices(devices)
-        return jsonify({})
-    return jsonify(devices[device_id].get("subscriptions", []))
+        return jsonify({"update_urls": [], "timestamp": devices[device_id]["updated"]})
+    since = request.args.get("since", 0, type=int)
+    updated = devices[device_id].get("updated", 0)
+    urls = devices[device_id].get("subscriptions", [])
+    if since and updated <= since:
+        return jsonify({"add": [], "remove": [], "timestamp": updated or int(datetime.now().timestamp())})
+    return jsonify({"add": urls, "remove": [], "timestamp": updated or int(datetime.now().timestamp())})
 
 
 @app.route("/api/2/episodes/<username>.json", methods=["GET", "POST"])
@@ -259,10 +272,8 @@ def list_feeds():
 
 @app.route('/feed/<podcast_name>')
 def get_feed(podcast_name):
-    if not session.get("username"):
-        auth = request.authorization
-        if not (auth and auth.username == GPODDER_USER and auth.password == GPODDER_PASS):
-            return Response('Unauthorized', 401)
+    if not check_auth():
+        return Response('Unauthorized', 401, {'WWW-Authenticate': 'Basic realm="Podcasts"'})
 
     original_rss = FEEDS.get(podcast_name)
     if not original_rss:
@@ -442,4 +453,4 @@ def run_cleanup():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=8080, debug=False)
