@@ -12,6 +12,7 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from functools import wraps
+import unicodedata
 import threading
 
 import requests
@@ -74,7 +75,9 @@ def load_opml():
         url = outline.get("xmlUrl") or outline.get("url")
         text = outline.get("text") or outline.get("title", "")
         if url and text:
-            slug = text.lower().strip().replace(" ", "_").replace("-", "_")
+            slug = unicodedata.normalize("NFKD", text.lower().strip())
+            slug = slug.encode("ascii", "ignore").decode("ascii")
+            slug = slug.replace(" ", "_").replace("-", "_")
             slug = "".join(c for c in slug if c.isalnum() or c == "_")
             feeds[slug] = url
     logger.info(f"Loaded {len(feeds)} podcasts from OPML")
@@ -295,9 +298,6 @@ def list_feeds():
 
 @app.route('/feed/<podcast_name>')
 def get_feed(podcast_name):
-    if not check_auth():
-        return Response('Unauthorized', 401, {'WWW-Authenticate': 'Basic realm="Podcasts"'})
-
     original_rss = FEEDS.get(podcast_name)
     if not original_rss:
         return jsonify({"error": f"Unknown podcast: {podcast_name}"}), 404
