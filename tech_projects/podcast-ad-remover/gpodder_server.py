@@ -108,6 +108,28 @@ def save_devices(devices):
 
 FEEDS = load_opml()
 
+
+def opml_feed_urls():
+    """Return the proxied feed URLs for all OPML podcasts, as AntennaPod should subscribe to."""
+    return [f'{BASE_URL}/feed/{slug}' for slug in FEEDS]
+
+
+def ensure_subscriptions_seeded(device_id="antennapod"):
+    """If subscriptions are empty, seed from OPML. Call on startup and device registration."""
+    devices = load_devices()
+    if device_id not in devices:
+        devices[device_id] = {"subscriptions": [], "id": device_id, "updated": 0}
+    
+    if not devices[device_id].get("subscriptions"):
+        devices[device_id]["subscriptions"] = opml_feed_urls()
+        devices[device_id]["updated"] = int(datetime.now().timestamp())
+        save_devices(devices)
+        logger.info(f"Seeded {len(FEEDS)} subscriptions into device '{device_id}' from OPML")
+
+
+# Seed on startup
+ensure_subscriptions_seeded()
+
 # ============================================================
 # APP
 # ============================================================
@@ -221,6 +243,7 @@ def gpodder_devices(username):
             "subscriptions": devices.get(device_id, {}).get("subscriptions", [])
         }
         save_devices(devices)
+        ensure_subscriptions_seeded(device_id)
         return jsonify({"status": "ok"})
     return jsonify([{
         "id": d.get("id"),
@@ -419,6 +442,26 @@ def stream_audio(podcast_name, episode_id):
         if temp_file.exists():
             temp_file.unlink()
         return jsonify({"error": str(e)}), 500
+
+
+# ============================================================
+# RESYNC
+# ============================================================
+
+@app.route('/resync')
+def resync():
+    """Re-seed all devices from current OPML. Call after editing podcasts.opml."""
+    global FEEDS
+    FEEDS = load_opml()
+    devices = load_devices()
+    count = 0
+    for device_id in devices:
+        devices[device_id]["subscriptions"] = opml_feed_urls()
+        devices[device_id]["updated"] = int(datetime.now().timestamp())
+        count += 1
+    save_devices(devices)
+    logger.info(f"Resynced {len(FEEDS)} podcasts into {count} devices")
+    return jsonify({"podcasts": len(FEEDS), "devices_updated": count, "feeds": opml_feed_urls()})
 
 
 # ============================================================
