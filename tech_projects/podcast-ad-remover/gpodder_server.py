@@ -139,6 +139,24 @@ logger = logging.getLogger(__name__)
 import xml.etree.ElementTree as ET
 OPML_FILE = Path("/data/podcasts.opml")
 GPODDER_DIR = Path("/data/gpodder")
+
+
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        # Check session first
+        if "username" in session:
+            return f(*args, **kwargs)
+        
+        # Fallback to Basic Auth
+        auth = request.authorization
+        if auth and auth.username == GPODDER_USER and auth.password == GPODDER_PASS:
+            return f(*args, **kwargs)
+        
+        return Response("Unauthorized", 401, {'WWW-Authenticate': 'Basic realm="Login Required"'})
+    return decorated
+
+
 GPODDER_DIR.mkdir(parents=True, exist_ok=True)
 
 def load_opml():
@@ -166,6 +184,24 @@ GPODDER_USER = os.environ.get("GPODDER_USER", "openclaw")
 GPODDER_PASS = os.environ.get("GPODDER_PASS", "podcast123")
 # Using Flask session instead
 GPODDER_DIR = Path("/data/gpodder")
+
+
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        # Check session first
+        if "username" in session:
+            return f(*args, **kwargs)
+        
+        # Fallback to Basic Auth
+        auth = request.authorization
+        if auth and auth.username == GPODDER_USER and auth.password == GPODDER_PASS:
+            return f(*args, **kwargs)
+        
+        return Response("Unauthorized", 401, {'WWW-Authenticate': 'Basic realm="Login Required"'})
+    return decorated
+
+
 GPODDER_DIR.mkdir(parents=True, exist_ok=True)
 logger = logging.getLogger(__name__)
 
@@ -196,17 +232,6 @@ PROCESSING = {}  # episode_id -> {"status": "processing"|"ready"|"error", "progr
 # AUTH DECORATOR
 # ============================================================
 
-def require_auth(f):
-    """Require basic auth if configured"""
-    def decorated(*args, **kwargs):
-        if RSS_USERNAME and RSS_PASSWORD:
-            from flask import request
-            auth = request.authorization
-            if not auth or auth.username != RSS_USERNAME or auth.password != RSS_PASSWORD:
-                return Response('Authentication required', 401, {'WWW-Authenticate': 'Basic realm="Podcast RSS"'})
-        return f(*args, **kwargs)
-    decorated.__name__ = f.__name__
-    return decorated
 
 # ============================================================
 # RSS PROXY - Modifies original RSS to point to our server
@@ -220,24 +245,12 @@ def gpodder_login(username):
     auth = request.authorization
     if auth and auth.username == GPODDER_USER and auth.password == GPODDER_PASS:
         session["username"] = username
-        return jsonify({})
+        response = make_response(jsonify({}))
+        response.status_code = 200
+        return response
     return Response("Unauthorized", 401)
 
-def get_session():
-    if "username" in session:
-        return {"username": session["username"]}
-    auth = request.authorization
-    if auth and auth.username == GPODDER_USER and auth.password == GPODDER_PASS:
-        return {"username": auth.username}
-    return None
 
-def require_auth(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if not get_session():
-            return Response("Unauthorized", 401)
-        return f(*args, **kwargs)
-    return decorated
 
 GPODDER_DEVICES_FILE = GPODDER_DIR / "devices.json"
 
@@ -256,9 +269,21 @@ def gpodder_devices(username):
     if request.method == "POST":
         data = request.json or request.form.to_dict() or {}
         device_id = data.get("id", data.get("device_id", "antennapod"))
-        devices[device_id] = {"id": device_id, "subscriptions": devices.get(device_id, {}).get("subscriptions", [])}
+        devices[device_id] = {
+            "id": device_id,
+            "caption": data.get("caption", "Phone"),
+            "type": data.get("type", "mobile"),
+            "subscriptions": devices.get(device_id, {}).get("subscriptions", [])
+        }
         save_devices(devices)
-    return jsonify([{"id": d.get("id"), "caption": d.get("caption", "Phone"), "type": d.get("type", "mobile"), "subscriptions": len(d.get("subscriptions", []))} for d in devices.values()])
+        return jsonify({"status": "ok"})
+    # Return subscriptions as INTEGER (count), not array
+    return jsonify([{
+        "id": d.get("id"),
+        "caption": d.get("caption", "Phone"),
+        "type": d.get("type", "mobile"),
+        "subscriptions": len(d.get("subscriptions", []))
+    } for d in devices.values()])
 
 @app.route("/api/2/subscriptions/<username>/<device_id>.json", methods=["GET", "POST"])
 @require_auth
@@ -298,14 +323,8 @@ def get_feed(podcast_name):
         if not (auth and auth.username == GPODDER_USER and auth.password == GPODDER_PASS):
             return Response('Unauthorized', 401)
     """Get modified RSS with our audio URLs"""
-    # Map podcast name to original RSS
-    rss_map = {
-        "det_store_bilded": "https://rss.podplaystudio.com/692.xml",
-        "pop_og_politikk": "https://rss.podplaystudio.com/4039.xml",
-        # Add more podcasts here
-    }
-    
-    original_rss = rss_map.get(podcast_name)
+    # Use FEEDS dictionary (loaded from OPML)
+    original_rss = FEEDS.get(podcast_name)
     if not original_rss:
         return jsonify({"error": "Unknown podcast"}), 404
     
