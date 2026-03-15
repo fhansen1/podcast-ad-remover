@@ -14,6 +14,8 @@ from pathlib import Path
 from functools import wraps
 import unicodedata
 import threading
+import queue
+import time
 
 import requests
 import feedparser
@@ -27,8 +29,9 @@ from flask import Flask, Response, request, jsonify, send_file, make_response, s
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 BASE_URL = os.environ.get("BASE_URL", "https://podcast.drhahn.no").rstrip("/")
-GPODDER_USER = os.environ.get("GPODDER_USER", "openclaw")
-GPODDER_PASS = os.environ.get("GPODDER_PASS", "podcast123")
+# Credentials from environment (set via environment variables)
+GPODDER_USER = os.environ.get("GPODDER_USER", os.environ.get("GPODDER_USERNAME", "openclaw"))
+GPODDER_PASS = os.environ.get("GPODDER_PASS", os.environ.get("GPODDER_PASSWORD", ""))
 
 OPML_FILE = Path("/data/podcasts.opml")
 GPODDER_DIR = Path("/data/gpodder")
@@ -48,6 +51,123 @@ AD_TIMESTAMPS = {
 }
 
 PROCESSING = {}
+
+
+# Processing queue for background tasks
+PROCESS_QUEUE = queue.Queue()
+PROCESSING_STATUS = {}
+
+def process_worker():
+    """Background worker that processes episodes one at a time."""
+    while True:
+        try:
+            episode_id, podcast_name, episode_info = PROCESS_QUEUE.get(timeout=1)
+            logger.info(f"Worker: Starting {episode_info['title']}")
+            process_episode_background(episode_id, podcast_name, episode_info)
+            PROCESS_QUEUE.task_done()
+            gc.collect()
+        except queue.Empty:
+            continue
+        except Exception as e:
+            logger.error(f"Worker error: {e}")
+            gc.collect()
+
+# Start worker thread
+import gc
+gc.collect()
+worker_thread = threading.Thread(target=process_worker, daemon=True)
+worker_thread.start()
+
+
+def process_episode_background(episode_id, podcast_name, episode_info):
+    """Background processing - called by worker thread."""
+    original_url = episode_info['audio_url']
+    title = episode_info['title']
+    episode_dir = STORAGE_DIR / podcast_name / episode_id
+    episode_dir.mkdir(parents=True, exist_ok=True)
+    processed_file = episode_dir / "clean.mp3"
+    temp_file = episode_dir / "original.mp3"
+    
+    try:
+        # Download
+        logger.info(f"Downloading: {title}")
+        resp = requests.get(original_url, stream=True, timeout=120)
+        resp.raise_for_status()
+        with open(temp_file, 'wb') as f:
+            for chunk in resp.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+        # Detect ads with retry
+        whisper_segments = None
+        for attempt in range(3):
+            try:
+                whisper_segments = detect_ads_with_whisper(str(temp_file))
+                break
+            except Exception as e:
+                if attempt < 2:
+                    wait_time = 2 ** attempt
+                    logger.warning(f"Whisper attempt {attempt+1} failed: {e}, retrying in {wait_time}s")
+                    time.sleep(wait_time)
+                else:
+                    logger.error(f"Whisper failed after 3 attempts: {e}")
+        
+        timestamps = whisper_segments[0] if whisper_segments else AD_TIMESTAMPS.get(podcast_name, {"start": 0, "end": 0})
+        logger.info(f"Processing: {title} (cuts: {timestamps})")
+
+        # Calculate cut times
+        cut_start, cut_end = 0, 0
+        if isinstance(timestamps, dict):
+            if timestamps.get("start", 0) == 0 and timestamps.get("end", 0) > 0:
+                cut_start = timestamps["end"]
+            elif timestamps.get("start", 0) > 0 and timestamps.get("end", 0) == 0:
+                cut_end = timestamps["start"]
+        if cut_start == 0 and cut_end == 0:
+            cut_start = timestamps.get("start", 0)
+            cut_end = timestamps.get("end", 0)
+
+        # Get duration
+        duration = get_duration(temp_file)
+
+        # Cut audio
+        if cut_start > 0 or cut_end > 0:
+            end_time = (duration - cut_end) if cut_end > 0 else duration
+            logger.info(f"Cutting: {cut_start}s → {end_time}s")
+            ffmpeg.input(str(temp_file), ss=cut_start).output(
+                str(processed_file),
+                t=end_time - cut_start,
+                acodec='libmp3lame',
+                ab='128k'
+            ).run(overwrite_output=True, quiet=True)
+        else:
+            processed_file.write_bytes(temp_file.read_bytes())
+
+        # Cleanup temp file
+        if temp_file.exists():
+            temp_file.unlink()
+
+        # Save metadata
+        with open(episode_dir / "metadata.json", "w") as f:
+            json.dump({
+                "processed_at": datetime.now().isoformat(),
+                "title": title,
+                "duration": duration,
+            }, f)
+
+        PROCESSING_STATUS[episode_id] = {"status": "ready", "title": title}
+        logger.info(f"Ready: {title}")
+        gc.collect()
+
+    except Exception as e:
+        logger.error(f"process_episode failed for {title}: {e}")
+        PROCESSING_STATUS[episode_id] = {"status": "error", "error": str(e)}
+        if temp_file.exists():
+            try:
+                temp_file.unlink()
+            except:
+                pass
+        gc.collect()
+
+
 
 # ============================================================
 # HELPERS
@@ -395,7 +515,20 @@ def stream_audio(podcast_name, episode_id):
             for chunk in resp.iter_content(chunk_size=8192):
                 f.write(chunk)
 
-        whisper_segments = detect_ads_with_whisper(str(temp_file))
+        # Retry Whisper up to 3 times
+        whisper_segments = None
+        for attempt in range(3):
+            try:
+                whisper_segments = detect_ads_with_whisper(str(temp_file))
+                break
+            except Exception as e:
+                if attempt < 2:
+                    wait_time = 2 ** attempt
+                    logger.warning(f"Whisper attempt {attempt+1} failed, retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                else:
+                    logger.error(f"Whisper failed after 3 attempts: {e}")
+                    whisper_segments = None
         timestamps = whisper_segments[0] if whisper_segments else AD_TIMESTAMPS.get(podcast_name, {"start": 0, "end": 0})
         logger.info(f"Processing: {title} (cuts: {timestamps})")
 
